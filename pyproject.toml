@@ -1,0 +1,5 @@
+[project]
+name = "documentcloud-processing-examples"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = ["python-documentcloud>=4.8.1"]
