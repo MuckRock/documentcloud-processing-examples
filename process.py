@@ -29,6 +29,12 @@ from documentcloud import DocumentCloud
 from documentcloud.documents import IMAGE_SIZES
 from documentcloud.exceptions import APIError, DoesNotExistError
 
+# identifies this repo's requests to the API and the asset bucket
+USER_AGENT = (
+    "documentcloud-processing-examples "
+    "(+https://github.com/MuckRock/documentcloud-processing-examples)"
+)
+
 ROOT = Path(__file__).parent
 INPUT_DIR = ROOT / "input"
 OUTPUT_DIR = ROOT / "output"
@@ -45,7 +51,12 @@ def get_client():
     password = os.environ.get("DC_PASSWORD")
     if not (username and password):
         sys.exit("Set DC_USERNAME and DC_PASSWORD in the environment")
-    return DocumentCloud(username=username, password=password)
+    client = DocumentCloud(username=username, password=password)
+    # the client builds its own user agent (requests' default plus the
+    # username); prefix ours so these requests are identifiable
+    existing = client.session.headers.get("User-Agent", "")
+    client.session.headers["User-Agent"] = f"{USER_AGENT} {existing}".strip()
+    return client
 
 
 def find_inputs():
@@ -107,7 +118,10 @@ def fetch(client, url):
             return client.get(url, full_url=True).content
         except DoesNotExistError:
             return None
-    response = client.documents.asset_get(url)
+    # asset fetches use a separate session, so pass our user agent along
+    response = client.documents.asset_get(
+        url, headers={"User-Agent": client.session.headers["User-Agent"]}
+    )
     if response.status_code == 404:
         return None
     response.raise_for_status()

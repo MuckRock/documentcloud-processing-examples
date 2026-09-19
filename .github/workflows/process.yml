@@ -1,0 +1,56 @@
+name: Process documents
+
+# Uploads any file in `input/` that doesn't have an output folder yet, then
+# commits the generated artifacts back to the repository.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "input/**"
+      - "process.py"
+      - ".github/workflows/process.yml"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Re-upload inputs that already have an output folder"
+        type: boolean
+        default: false
+
+# uploads are slow and not idempotent; never run two at once
+concurrency:
+  group: process-documents
+  cancel-in-progress: false
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: true
+
+      - run: uv sync --locked
+
+      - name: Process inputs
+        env:
+          DC_USERNAME: ${{ secrets.DC_USERNAME }}
+          DC_PASSWORD: ${{ secrets.DC_PASSWORD }}
+        run: uv run process.py ${{ inputs.force && '--force' || '' }}
+
+      - name: Commit outputs
+        run: |
+          if [ -z "$(git status --porcelain output)" ]; then
+            echo "No new outputs"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add output
+          git commit -m "Add processing outputs for ${{ github.sha }}"
+          git push
